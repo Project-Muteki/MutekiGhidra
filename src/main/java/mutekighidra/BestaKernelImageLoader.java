@@ -80,7 +80,7 @@ public class BestaKernelImageLoader extends AbstractProgramWrapperLoader {
 			fp.createDWord(base.add(0x8l));
 			fp.createLabel(base.add(0xcl), "_Besta_LoadBase", true);
 			fp.createDWord(base.add(0xcl));
-			fp.createLabel(base.add(0x10l), "_Besta_LoadSize2", true);
+			fp.createLabel(base.add(0x10l), "_Besta_TailOffset", true);
 			fp.createDWord(base.add(0x10l));
 			if (formatVersion == 2) {
 				fp.createLabel(base.add(0x14l), "_Besta_ProcessorType", true);
@@ -95,11 +95,11 @@ public class BestaKernelImageLoader extends AbstractProgramWrapperLoader {
 	}
 
 	private int detectFormatVersion(final ByteProvider provider) throws IOException {
-		final long tailOffset = provider.length() - 0x500l;
-		if (tailOffset <= 0) {
+		final BinaryReader reader = new BinaryReader(provider, true);
+		final long tailOffset = reader.readUnsignedInt(0x10l) - 0x500l;
+		if (tailOffset <= 0 || tailOffset > provider.length() - 0x500l) {
 			return 0;
 		}
-		final BinaryReader reader = new BinaryReader(provider, true);
 		final byte[] verString64 = reader.readByteArray(tailOffset + 0x20l, 0x10);
 		final byte[] verString32 = reader.readByteArray(tailOffset + 0x50l, 0x10);
 		// TODO check whether the checksum block makes sense (all checksum bytes and (0, 2) (1, 3) pairs should add up to 0)
