@@ -10,6 +10,8 @@ import ghidra.app.util.bin.ByteProvider;
 import ghidra.app.util.importer.MessageLog;
 import ghidra.app.util.opinion.AbstractProgramWrapperLoader;
 import ghidra.app.util.opinion.LoadSpec;
+import ghidra.app.util.opinion.Loader;
+import ghidra.framework.model.DomainObject;
 import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.lang.LanguageCompilerSpecPair;
@@ -18,10 +20,43 @@ import ghidra.program.model.mem.MemoryBlock;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.task.TaskMonitor;
 
-public class BestaKernelImageLoader extends AbstractProgramWrapperLoader {
+public class BestaKernelLoader extends AbstractProgramWrapperLoader {
+	private static final String OVERRIDE_LOAD_BASE_OPTION = "Override load base";
+
+	@Override
+	public List<Option> getDefaultOptions(ByteProvider provider, LoadSpec loadSpec, DomainObject domainObject,
+			boolean isLoadIntoProgram) {
+		final List<Option> options = super.getDefaultOptions(provider, loadSpec, domainObject, isLoadIntoProgram);
+		options.add(new Option(OVERRIDE_LOAD_BASE_OPTION, -1l, Long.class, Loader.COMMAND_LINE_ARG_PREFIX + "-overrideloadbase"));
+		return options;
+	}
+
+	@Override
+	public String validateOptions(ByteProvider provider, LoadSpec loadSpec, List<Option> options, Program program) {
+		// TODO Auto-generated method stub
+		final String parentResult = super.validateOptions(provider, loadSpec, options, program);
+		if (parentResult != null) {
+			return parentResult;
+		}
+		
+		for (Option op : options) {
+			if (op.getName().equals(OVERRIDE_LOAD_BASE_OPTION)) {
+				if (op.getValue() != null && !op.getValue().getClass().equals(Long.class)) {
+					return String.format("Invalid load base %s", op.getValue().toString());
+				}
+				final long address = ((Long) op.getValue()).longValue();
+				if (address > 0xffffffffl) {
+					return String.format("Address value %08x is too large", address);
+				}
+			}
+		}
+
+		return null;
+	}
+
 	@Override
 	public String getName() {
-		return "Besta RTOS Kernel Image";
+		return "Besta RTOS Kernel";
 	}
 
 	@Override
@@ -53,10 +88,23 @@ public class BestaKernelImageLoader extends AbstractProgramWrapperLoader {
 			TaskMonitor monitor, MessageLog log) throws CancelledException, IOException {
 		monitor.setMessage("Loading Besta RTOS kernel image...");
 
+		long overrideBase = -1;
+		for (Option op : options) {
+			if (op.getName().equals(OVERRIDE_LOAD_BASE_OPTION)) {
+				overrideBase = ((Long) op.getValue()).longValue();
+			}
+		}
+
 		final FlatProgramAPI fp = new FlatProgramAPI(program, monitor);
 		final BinaryReader reader = new BinaryReader(provider, true);
-		long baseVal = reader.readUnsignedInt(0xcl);
-		final Address base = fp.toAddr(baseVal);
+		Address base;
+		long baseOffset = 0;
+		if (overrideBase < 0) {
+			base = fp.toAddr(reader.readUnsignedInt(0xcl));
+		} else {
+			base = fp.toAddr(overrideBase);
+			baseOffset = overrideBase - reader.readUnsignedInt(0xcl);
+		}
 		final int formatVersion = detectFormatVersion(provider);
 		try {
 			MemoryBlock mainBlock = fp.createMemoryBlock("code", base, provider.getInputStream(0l), provider.length(), false);
@@ -68,11 +116,16 @@ public class BestaKernelImageLoader extends AbstractProgramWrapperLoader {
 			return;
 		}
 
-		final long epVal = reader.readUnsignedInt(0x0l);
+		final long epVal = reader.readUnsignedInt(0x0l) + baseOffset;
 		final Address entryPoint = fp.toAddr(epVal);
-
 		fp.addEntryPoint(entryPoint);
+
 		try {
+			// patch the entry point and load base values.
+			if (overrideBase >= 0) {
+				fp.setInt(base.add(0x0l), (int) epVal);
+				fp.setInt(base.add(0xcl), (int) overrideBase);
+			}
 			fp.createLabel(entryPoint, "_Besta_Reset", true);
 			fp.createLabel(base.add(0x0l), "_Besta_EntryPointer", true);
 			fp.createDWord(base.add(0x0l));
