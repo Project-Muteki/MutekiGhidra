@@ -4,8 +4,8 @@ Deeper Ghidra integration.
 
 ## Features
 
-- Kernel image (`xAxxx.ROM`) loader.
-- Script to syscall .
+- Kernel image (`xAxxx.ROM`) loader with architecture detection.
+- Script to automatically find kernel syscall handler and label all syscall functions (`SyscallLabeler.java`).
 
 ## Install
 
