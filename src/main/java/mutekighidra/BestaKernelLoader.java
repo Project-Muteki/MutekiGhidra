@@ -25,8 +25,9 @@ public class BestaKernelLoader extends AbstractProgramWrapperLoader {
 
 	@Override
 	public List<Option> getDefaultOptions(ByteProvider provider, LoadSpec loadSpec, DomainObject domainObject,
-			boolean isLoadIntoProgram) {
-		final List<Option> options = super.getDefaultOptions(provider, loadSpec, domainObject, isLoadIntoProgram);
+			boolean loadIntoProgram, boolean mirrorFsLayout) {
+		// TODO Auto-generated method stub
+		final var options = super.getDefaultOptions(provider, loadSpec, domainObject, loadIntoProgram, mirrorFsLayout);
 		options.add(new Option(OVERRIDE_LOAD_BASE_OPTION, -1l, Long.class, Loader.COMMAND_LINE_ARG_PREFIX + "-overrideloadbase"));
 		return options;
 	}
@@ -83,9 +84,8 @@ public class BestaKernelLoader extends AbstractProgramWrapperLoader {
 		);
 	}
 
-	@Override
-	protected void load(ByteProvider provider, LoadSpec loadSpec, List<Option> options, Program program,
-			TaskMonitor monitor, MessageLog log) throws CancelledException, IOException {
+	private void load(ByteProvider provider, LoadSpec loadSpec, List<Option> options, Program program,
+			TaskMonitor monitor, MessageLog log) throws IOException {
 		monitor.setMessage("Loading Besta RTOS kernel image...");
 
 		long overrideBase = -1;
@@ -147,6 +147,11 @@ public class BestaKernelLoader extends AbstractProgramWrapperLoader {
 		}
 	}
 
+	@Override
+	protected void load(Program program, ImporterSettings settings) throws CancelledException, IOException {
+		load(settings.provider(), settings.loadSpec(), settings.options(), program, settings.monitor(), settings.log());
+	}
+
 	private int detectFormatVersion(final ByteProvider provider) throws IOException {
 		final BinaryReader reader = new BinaryReader(provider, true);
 		final long tailOffset = reader.readUnsignedInt(0x10l) - 0x500l;
@@ -181,4 +186,5 @@ public class BestaKernelLoader extends AbstractProgramWrapperLoader {
 		}
 		return buffer[size - 1] == 0 && segmentCount == 2;
 	}
+
 }
